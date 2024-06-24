@@ -10,7 +10,7 @@ import { MemoryManager } from "../memory-manager";
 export class RedisServer implements IRedisServer {
   private server?: Server;
   private readonly validCommands = new Set(Object.values(Command));
-  private store = new Map<string, any>();
+  private store = new Map<string, { value: any; counter: number }>();
   private memoryManager!: MemoryManager;
 
   public constructor(private port: number, private host: string) {
@@ -78,6 +78,10 @@ export class RedisServer implements IRedisServer {
         return this.handleIncr(commands.slice(1));
       }
 
+      case Command.DECR: {
+        return this.handleDecr(commands.slice(1));
+      }
+
       default: {
         return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid RESP Command!");
       }
@@ -93,8 +97,6 @@ export class RedisServer implements IRedisServer {
     }
 
     const [key, start, stop] = commands;
-
-    console.log(key, start, stop);
 
     const numStart = Number(start);
     const numStop = Number(stop);
@@ -123,22 +125,22 @@ export class RedisServer implements IRedisServer {
     const isStartPositive = numStart >= 0;
     if (isStartPositive) {
       for (let i = numStart; i <= numStop; i++) {
-        elementsToReturn.push(keyExists[i]);
+        elementsToReturn.push(keyExists.value[i]);
       }
     } else {
-      const startIndex = keyExists.length - numStart;
+      const startIndex = keyExists.value.length - numStart;
       const isStopPositive = numStop >= 0;
 
       if (isStopPositive) {
-        const stopIndex = keyExists.length - numStop;
+        const stopIndex = keyExists.value.length - numStop;
         for (let i = startIndex; i >= stopIndex; i--) {
-          elementsToReturn.push(keyExists[i]);
+          elementsToReturn.push(keyExists.value[i]);
         }
       } else {
-        const stopIndex = keyExists.length - numStop;
+        const stopIndex = keyExists.value.length - numStop;
 
         for (let i = startIndex; i >= stopIndex; i++) {
-          elementsToReturn.push(keyExists[i]);
+          elementsToReturn.push(keyExists.value[i]);
         }
       }
 
@@ -146,6 +148,7 @@ export class RedisServer implements IRedisServer {
         return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
       }
     }
+    keyExists.counter++;
 
     return this.constructResponse(DataType.SIMPLE_STRING, elementsToReturn.toString());
   }
@@ -167,11 +170,12 @@ export class RedisServer implements IRedisServer {
         return this.constructResponse(DataType.SIMPLE_ERROR, `Not array type's could't be pushed!`);
       }
 
-      keyExists.unshift(...values);
+      keyExists.value.unshift(...values);
+      keyExists.counter++;
     } else {
-      this.store.set(key, []);
+      this.store.set(key, { value: [], counter: 1 });
       const newKey = this.store.get(key);
-      newKey.unshift(...values);
+      newKey?.value.unshift(...values);
     }
 
     return this.constructResponse(DataType.INTEGER, values.length);
@@ -194,11 +198,12 @@ export class RedisServer implements IRedisServer {
         return this.constructResponse(DataType.SIMPLE_ERROR, `Not array type's could't be pushed!`);
       }
 
-      keyExists.push(...values);
+      keyExists.value.push(...values);
+      keyExists.counter++;
     } else {
-      this.store.set(key, []);
+      this.store.set(key, { value: [], counter: 1 });
       const newKey = this.store.get(key);
-      newKey.push(...values);
+      newKey?.value.push(...values);
     }
 
     return this.constructResponse(DataType.INTEGER, values.length);
@@ -212,17 +217,18 @@ export class RedisServer implements IRedisServer {
     const keyExists = this.store.has(commands[0]);
 
     if (!keyExists) {
-      this.store.set(commands[0], 0);
+      this.store.set(commands[0], { value: 0, counter: 1 });
     } else {
       const key = this.store.get(commands[0]);
 
-      const numKey = Number(key);
+      const numKey = Number(key?.value);
+
       const isKeyValid = TypeUtils.isNumber(numKey);
       if (!isKeyValid) {
         return this.constructResponse(DataType.SIMPLE_ERROR, `Not integer type's could't be incremented!`);
       }
 
-      this.store.set(commands[0], Number(numKey) + 1);
+      this.store.set(commands[0], { value: Number(numKey) + 1, counter: key?.counter! + 1 });
     }
 
     return this.constructResponse(DataType.INTEGER, 1);
@@ -236,16 +242,18 @@ export class RedisServer implements IRedisServer {
     const keyExists = this.store.has(commands[0]);
 
     if (!keyExists) {
-      this.store.set(commands[0], 0);
+      this.store.set(commands[0], { value: 0, counter: 1 });
     } else {
       const key = this.store.get(commands[0]);
-      const numKey = Number(key);
+
+      const numKey = Number(key?.value);
+
       const isKeyValid = TypeUtils.isNumber(numKey);
       if (!isKeyValid) {
-        return this.constructResponse(DataType.SIMPLE_ERROR, `Not integer type's could't be decremented!`);
+        return this.constructResponse(DataType.SIMPLE_ERROR, `Not integer type's could't be incremented!`);
       }
 
-      this.store.set(commands[0], Number(numKey) - 1);
+      this.store.set(commands[0], { value: Number(numKey) - 1, counter: key?.counter! + 1 });
     }
 
     return this.constructResponse(DataType.INTEGER, 1);
@@ -266,7 +274,7 @@ export class RedisServer implements IRedisServer {
         );
       }
 
-      this.store.set(key, value);
+      this.store.set(key, { value, counter: 1 });
     }
 
     return this.constructResponse(DataType.SIMPLE_STRING, "OK");
@@ -322,7 +330,7 @@ export class RedisServer implements IRedisServer {
       this.store.set(key, { ...isKeyPresent, counter: isKeyPresent.counter + 1 });
     }
 
-    return this.constructResponse(DataType.SIMPLE_STRING, this.store.get(key).value || "Not found!");
+    return this.constructResponse(DataType.SIMPLE_STRING, this.store.get(key)?.value || "Not found!");
   }
 
   private handleSetCommand(commands: string[]) {
