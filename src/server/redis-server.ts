@@ -61,7 +61,11 @@ export class RedisServer implements IRedisServer {
       }
 
       case Command.RPUSH: {
-        return this.handleLPush(deserielizedArrCommands.slice(1));
+        return this.handleRPush(deserielizedArrCommands.slice(1));
+      }
+
+      case Command.LRANGE: {
+        return this.handleLRange(deserielizedArrCommands.slice(1));
       }
 
       case Command.INCR: {
@@ -72,6 +76,72 @@ export class RedisServer implements IRedisServer {
         return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid RESP Command!");
       }
     }
+  }
+
+  private handleLRange(deserielizedArrCommands: string[]) {
+    if (!deserielizedArrCommands.length || deserielizedArrCommands.length > 3) {
+      return this.constructResponse(
+        DataType.SIMPLE_ERROR,
+        `Invalid syntax for lrange command! Example: lrange key start end`,
+      );
+    }
+
+    const [key, start, stop] = deserielizedArrCommands;
+
+    console.log(key, start, stop);
+
+    const numStart = Number(start);
+    const numStop = Number(stop);
+
+    const isValidStart = TypeUtils.isNumber(numStart);
+    const isValidStop = TypeUtils.isNumber(numStop);
+
+    if (!isValidStart || !isValidStop) {
+      return this.constructResponse(
+        DataType.SIMPLE_ERROR,
+        `Invalid syntax for lrange command! Example: lrange key start end`,
+      );
+    }
+
+    const keyExists = this.store.get(key);
+
+    if (!keyExists) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Not found key!`);
+    }
+
+    if (numStart > numStop) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
+    }
+    const elementsToReturn = [];
+
+    const isStartPositive = numStart >= 0;
+    if (isStartPositive) {
+      for (let i = numStart; i <= numStop; i++) {
+        elementsToReturn.push(keyExists[i]);
+      }
+    } else {
+      const startIndex = keyExists.length - numStart;
+      const isStopPositive = numStop >= 0;
+
+      if (isStopPositive) {
+        const stopIndex = keyExists.length - numStop;
+        for (let i = startIndex; i >= stopIndex; i--) {
+          elementsToReturn.push(keyExists[i]);
+        }
+      } else {
+        const stopIndex = keyExists.length - numStop;
+
+        for (let i = startIndex; i >= stopIndex; i++) {
+          elementsToReturn.push(keyExists[i]);
+        }
+      }
+
+      if (startIndex < 0) {
+        return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
+      }
+    }
+
+    return this.constructResponse(DataType.SIMPLE_STRING, elementsToReturn.toString());
   }
 
   private handleLPush(deserielizedArrCommands: string[]) {

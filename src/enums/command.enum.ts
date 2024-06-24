@@ -10,4 +10,5 @@ export enum Command {
   DECR = "decr",
   LPUSH = "lpush",
   RPUSH = "rpush",
+  LRANGE = "lrange",
 }
