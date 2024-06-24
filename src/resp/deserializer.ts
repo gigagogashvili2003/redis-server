@@ -1,22 +1,35 @@
 import { CRLF } from "../constants";
 
 export class Deserializer {
-  public constructor(public data: string) {}
+  public constructor(public input: string) {}
 
-  public deserialize() {
-    const lines = this.data.split(CRLF);
+  public deserializeArrCommands() {
+    this.validateArrCommands();
 
-    const elementsCount = parseInt(lines.at(0)!.substring(1), 10);
+    const splitByCRLF = this.input.split(CRLF);
+    const elementsCount = parseInt(splitByCRLF.at(0)!.substring(1), 10);
     const elements: string[] = [];
 
-    for (let i = 2; i < lines.length; i += 2) {
-      elements.push(lines[i]);
+    for (let i = 2; i < splitByCRLF.length; i += 2) {
+      elements.push(splitByCRLF[i]);
     }
 
-    if (elements.length !== elementsCount) {
+    if (elementsCount !== elements.length) {
       throw new Error("Invalid Command!");
     }
 
-    return [elements.at(0), elements.at(1), elements.at(2)];
+    return elements;
   }
+
+  public validateArrCommands() {
+    if (!this.input.startsWith("*")) {
+      throw new Error("Invalid Command!");
+    }
+
+    if (!this.input.endsWith(CRLF)) {
+      throw new Error("Invalid Command!");
+    }
+  }
+
+  public deserialize() {}
 }
