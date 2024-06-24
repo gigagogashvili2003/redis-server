@@ -8,4 +8,5 @@ export enum Command {
   DEL = "del",
   INCR = "incr",
   DECR = "decr",
+  LPUSH = "lpush",
 }

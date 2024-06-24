@@ -4,7 +4,7 @@ import { Deserializer } from "../resp/deserializer";
 import { Command, DataType } from "../enums";
 import { Serializer } from "../resp";
 import { AllowedTypes } from "../types";
-import { TypeUtils } from "../helpers/type-utils";
+import { TypeUtils } from "../helpers";
 
 export class RedisServer implements IRedisServer {
   private server?: Server;
@@ -55,6 +55,11 @@ export class RedisServer implements IRedisServer {
         return this.handleDel(deserielizedArrCommands.slice(1));
       }
 
+      case Command.LPUSH: {
+        console.log(this.store);
+        return this.handleLPush(deserielizedArrCommands.slice(1));
+      }
+
       case Command.INCR: {
         return this.handleIncr(deserielizedArrCommands.slice(1));
       }
@@ -63,6 +68,33 @@ export class RedisServer implements IRedisServer {
         return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid RESP Command!");
       }
     }
+  }
+
+  private handleLPush(deserielizedArrCommands: string[]) {
+    if (!deserielizedArrCommands.length || deserielizedArrCommands.length < 2) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for incr command! Example: set key value`);
+    }
+
+    const key = deserielizedArrCommands[0];
+    const values = deserielizedArrCommands.slice(1);
+
+    const keyExists = this.store.get(key);
+
+    if (keyExists) {
+      const isArray = TypeUtils.isArray(keyExists);
+
+      if (!isArray) {
+        return this.constructResponse(DataType.SIMPLE_ERROR, `Not array type's could't be pushed!`);
+      }
+
+      keyExists.unshift(...values);
+    } else {
+      this.store.set(key, []);
+      const newKey = this.store.get(key);
+      newKey.unshift(...values);
+    }
+
+    return this.constructResponse(DataType.INTEGER, values.length);
   }
 
   private handleIncr(deserielizedArrCommands: string[]) {
