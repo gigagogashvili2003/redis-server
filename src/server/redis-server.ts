@@ -60,6 +60,10 @@ export class RedisServer implements IRedisServer {
         return this.handleLPush(deserielizedArrCommands.slice(1));
       }
 
+      case Command.RPUSH: {
+        return this.handleLPush(deserielizedArrCommands.slice(1));
+      }
+
       case Command.INCR: {
         return this.handleIncr(deserielizedArrCommands.slice(1));
       }
@@ -92,6 +96,33 @@ export class RedisServer implements IRedisServer {
       this.store.set(key, []);
       const newKey = this.store.get(key);
       newKey.unshift(...values);
+    }
+
+    return this.constructResponse(DataType.INTEGER, values.length);
+  }
+
+  private handleRPush(deserielizedArrCommands: string[]) {
+    if (!deserielizedArrCommands.length || deserielizedArrCommands.length < 2) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for incr command! Example: set key value`);
+    }
+
+    const key = deserielizedArrCommands[0];
+    const values = deserielizedArrCommands.slice(1);
+
+    const keyExists = this.store.get(key);
+
+    if (keyExists) {
+      const isArray = TypeUtils.isArray(keyExists);
+
+      if (!isArray) {
+        return this.constructResponse(DataType.SIMPLE_ERROR, `Not array type's could't be pushed!`);
+      }
+
+      keyExists.push(...values);
+    } else {
+      this.store.set(key, []);
+      const newKey = this.store.get(key);
+      newKey.push(...values);
     }
 
     return this.constructResponse(DataType.INTEGER, values.length);
