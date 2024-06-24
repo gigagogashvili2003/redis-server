@@ -1,0 +1,16 @@
+{
+  "name": "redis-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx --watch src/main.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^20.14.7",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.15.7"
+  }
+}
