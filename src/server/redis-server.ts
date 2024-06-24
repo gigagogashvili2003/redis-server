@@ -5,25 +5,31 @@ import { Command, DataType } from "../enums";
 import { Serializer } from "../resp";
 import { AllowedTypes } from "../types";
 import { TypeUtils } from "../helpers";
+import { MemoryManager } from "../memory-manager";
 
 export class RedisServer implements IRedisServer {
   private server?: Server;
   private readonly validCommands = new Set(Object.values(Command));
   private store = new Map<string, any>();
+  private memoryManager!: MemoryManager;
 
   public constructor(private port: number, private host: string) {
     this.init(port, host);
+    this.memoryManager = new MemoryManager();
+    setInterval(() => {
+      this.memoryManager.manage(this.store, process.memoryUsage());
+    }, 30000);
   }
 
   private async handleData(data: Buffer) {
     const deserializer = new Deserializer(data.toString());
-    const deserielizedArrCommands = deserializer.deserializeArrCommands();
-    const command = deserielizedArrCommands[0] as Command;
+    const commands = deserializer.deserializeArrCommands();
+    const command = commands[0] as Command;
 
     const isFirstCommandAcceptable = this.validCommands.has(command);
 
     if (!isFirstCommandAcceptable) {
-      return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid command! ${deserielizedArrCommands[0]}`);
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid command! ${commands[0]}`);
     }
 
     switch (command) {
@@ -32,44 +38,44 @@ export class RedisServer implements IRedisServer {
       }
 
       case Command.ECHO: {
-        return this.handleEcho(deserielizedArrCommands);
+        return this.handleEcho(commands.slice(1));
       }
 
       case Command.SET: {
-        return this.handleSetCommand(deserielizedArrCommands);
+        return this.handleSetCommand(commands.slice(1));
       }
 
       case Command.MSET: {
-        return this.handleMultiSet(deserielizedArrCommands.slice(1));
+        return this.handleMultiSet(commands.slice(1));
       }
 
       case Command.GET: {
-        return this.handleGetCommand(deserielizedArrCommands);
+        return this.handleGetCommand(commands.slice(1));
       }
 
       case Command.EXISTS: {
-        return this.handleExists(deserielizedArrCommands.slice(1));
+        return this.handleExists(commands.slice(1));
       }
 
       case Command.DEL: {
-        return this.handleDel(deserielizedArrCommands.slice(1));
+        return this.handleDel(commands.slice(1));
       }
 
       case Command.LPUSH: {
         console.log(this.store);
-        return this.handleLPush(deserielizedArrCommands.slice(1));
+        return this.handleLPush(commands.slice(1));
       }
 
       case Command.RPUSH: {
-        return this.handleRPush(deserielizedArrCommands.slice(1));
+        return this.handleRPush(commands.slice(1));
       }
 
       case Command.LRANGE: {
-        return this.handleLRange(deserielizedArrCommands.slice(1));
+        return this.handleLRange(commands.slice(1));
       }
 
       case Command.INCR: {
-        return this.handleIncr(deserielizedArrCommands.slice(1));
+        return this.handleIncr(commands.slice(1));
       }
 
       default: {
@@ -78,15 +84,15 @@ export class RedisServer implements IRedisServer {
     }
   }
 
-  private handleLRange(deserielizedArrCommands: string[]) {
-    if (!deserielizedArrCommands.length || deserielizedArrCommands.length > 3) {
+  private handleLRange(commands: string[]) {
+    if (!commands.length || commands.length > 3) {
       return this.constructResponse(
         DataType.SIMPLE_ERROR,
         `Invalid syntax for lrange command! Example: lrange key start end`,
       );
     }
 
-    const [key, start, stop] = deserielizedArrCommands;
+    const [key, start, stop] = commands;
 
     console.log(key, start, stop);
 
@@ -144,13 +150,13 @@ export class RedisServer implements IRedisServer {
     return this.constructResponse(DataType.SIMPLE_STRING, elementsToReturn.toString());
   }
 
-  private handleLPush(deserielizedArrCommands: string[]) {
-    if (!deserielizedArrCommands.length || deserielizedArrCommands.length < 2) {
+  private handleLPush(commands: string[]) {
+    if (!commands.length || commands.length < 2) {
       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for incr command! Example: set key value`);
     }
 
-    const key = deserielizedArrCommands[0];
-    const values = deserielizedArrCommands.slice(1);
+    const key = commands[0];
+    const values = commands.slice(1);
 
     const keyExists = this.store.get(key);
 
@@ -171,13 +177,13 @@ export class RedisServer implements IRedisServer {
     return this.constructResponse(DataType.INTEGER, values.length);
   }
 
-  private handleRPush(deserielizedArrCommands: string[]) {
-    if (!deserielizedArrCommands.length || deserielizedArrCommands.length < 2) {
+  private handleRPush(commands: string[]) {
+    if (!commands.length || commands.length < 2) {
       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for incr command! Example: set key value`);
     }
 
-    const key = deserielizedArrCommands[0];
-    const values = deserielizedArrCommands.slice(1);
+    const key = commands[0];
+    const values = commands.slice(1);
 
     const keyExists = this.store.get(key);
 
@@ -198,17 +204,17 @@ export class RedisServer implements IRedisServer {
     return this.constructResponse(DataType.INTEGER, values.length);
   }
 
-  private handleIncr(deserielizedArrCommands: string[]) {
-    if (!deserielizedArrCommands.length || deserielizedArrCommands.length > 1) {
+  private handleIncr(commands: string[]) {
+    if (!commands.length || commands.length > 1) {
       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for incr command! Example: set key value`);
     }
 
-    const keyExists = this.store.has(deserielizedArrCommands[0]);
+    const keyExists = this.store.has(commands[0]);
 
     if (!keyExists) {
-      this.store.set(deserielizedArrCommands[0], 0);
+      this.store.set(commands[0], 0);
     } else {
-      const key = this.store.get(deserielizedArrCommands[0]);
+      const key = this.store.get(commands[0]);
 
       const numKey = Number(key);
       const isKeyValid = TypeUtils.isNumber(numKey);
@@ -216,42 +222,42 @@ export class RedisServer implements IRedisServer {
         return this.constructResponse(DataType.SIMPLE_ERROR, `Not integer type's could't be incremented!`);
       }
 
-      this.store.set(deserielizedArrCommands[0], Number(numKey) + 1);
+      this.store.set(commands[0], Number(numKey) + 1);
     }
 
     return this.constructResponse(DataType.INTEGER, 1);
   }
 
-  private handleDecr(deserielizedArrCommands: string[]) {
-    if (!deserielizedArrCommands.length || deserielizedArrCommands.length > 1) {
+  private handleDecr(commands: string[]) {
+    if (!commands.length || commands.length > 1) {
       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for incr command! Example: set key value`);
     }
 
-    const keyExists = this.store.has(deserielizedArrCommands[0]);
+    const keyExists = this.store.has(commands[0]);
 
     if (!keyExists) {
-      this.store.set(deserielizedArrCommands[0], 0);
+      this.store.set(commands[0], 0);
     } else {
-      const key = this.store.get(deserielizedArrCommands[0]);
+      const key = this.store.get(commands[0]);
       const numKey = Number(key);
       const isKeyValid = TypeUtils.isNumber(numKey);
       if (!isKeyValid) {
         return this.constructResponse(DataType.SIMPLE_ERROR, `Not integer type's could't be decremented!`);
       }
 
-      this.store.set(deserielizedArrCommands[0], Number(numKey) - 1);
+      this.store.set(commands[0], Number(numKey) - 1);
     }
 
     return this.constructResponse(DataType.INTEGER, 1);
   }
 
-  private handleMultiSet(deserielizedArrCommands: string[]) {
-    if (!deserielizedArrCommands.length) {
+  private handleMultiSet(commands: string[]) {
+    if (!commands.length) {
       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for set command! Example: set key value`);
     }
 
-    for (let i = 0; i < deserielizedArrCommands.length; i += 2) {
-      const [key, value] = deserielizedArrCommands.slice(i, i + 2);
+    for (let i = 0; i < commands.length; i += 2) {
+      const [key, value] = commands.slice(i, i + 2);
 
       if (!key || !value) {
         return this.constructResponse(
@@ -266,14 +272,14 @@ export class RedisServer implements IRedisServer {
     return this.constructResponse(DataType.SIMPLE_STRING, "OK");
   }
 
-  private handleExists(deserielizedArrCommands: string[]) {
+  private handleExists(commands: string[]) {
     let counter = 0;
 
-    if (!deserielizedArrCommands.length) {
+    if (!commands.length) {
       return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid syntax for exists command!");
     }
 
-    for (const key of deserielizedArrCommands) {
+    for (const key of commands) {
       const isKeyPresent = this.store.has(key);
 
       if (isKeyPresent) {
@@ -284,14 +290,14 @@ export class RedisServer implements IRedisServer {
     return this.constructResponse(DataType.INTEGER, counter);
   }
 
-  private handleDel(deserielizedArrCommands: string[]) {
+  private handleDel(commands: string[]) {
     let deletedCounter = 0;
 
-    if (!deserielizedArrCommands.length) {
+    if (!commands.length) {
       return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid syntax for delete command!");
     }
 
-    for (const key of deserielizedArrCommands) {
+    for (const key of commands) {
       const isKeyPresent = this.store.has(key);
 
       if (isKeyPresent) {
@@ -303,32 +309,48 @@ export class RedisServer implements IRedisServer {
     return this.constructResponse(DataType.INTEGER, deletedCounter);
   }
 
-  private handleGetCommand(deserielizedArrCommands: string[]) {
-    const [key] = deserielizedArrCommands.slice(1);
+  private handleGetCommand(commands: string[]) {
+    if (!commands.length) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid syntax for get command!");
+    }
 
-    return this.constructResponse(DataType.SIMPLE_STRING, this.store.get(key) || "Not found!");
+    const [key] = commands;
+
+    const isKeyPresent = this.store.get(key);
+
+    if (isKeyPresent) {
+      this.store.set(key, { ...isKeyPresent, counter: isKeyPresent.counter + 1 });
+    }
+
+    return this.constructResponse(DataType.SIMPLE_STRING, this.store.get(key).value || "Not found!");
   }
 
-  private handleSetCommand(deserielizedArrCommands: string[]) {
-    if (deserielizedArrCommands.length < 3) {
+  private handleSetCommand(commands: string[]) {
+    if (commands.length < 2) {
       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for set command! Example: set key value`);
     }
 
-    const [key, value] = deserielizedArrCommands.slice(1);
-    this.store.set(key, value);
+    const [key, value] = commands;
+    const isNumberValue = TypeUtils.isNumber(Number(value));
+
+    if (isNumberValue) {
+      this.store.set(key, { value: Number(value), counter: 1 });
+    } else {
+      this.store.set(key, { value, counter: 1 });
+    }
 
     return this.constructResponse(DataType.SIMPLE_STRING, "OK");
   }
 
-  private handleEcho(deserielizedArrCommands: string[]) {
-    if (deserielizedArrCommands.length !== 2) {
+  private handleEcho(commands: string[]) {
+    if (!commands.length) {
       return this.constructResponse(
         DataType.SIMPLE_ERROR,
         `Invalid syntax for echo command! Example: echo "something"`,
       );
     }
 
-    return this.constructResponse(DataType.SIMPLE_STRING, deserielizedArrCommands[1]);
+    return this.constructResponse(DataType.SIMPLE_STRING, commands[1]);
   }
 
   private constructResponse(type: DataType, output: AllowedTypes) {
