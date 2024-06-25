@@ -32,7 +32,7 @@ import { RedisServer } from "./server";
 // Example usage
 new RedisServer(6379, "localhost");
 ```
-##Use redis-cli to connect redis-server
+Use redis-cli to connect redis-server
 
 ```bash
 redis-cli -h localhost -p 6379
