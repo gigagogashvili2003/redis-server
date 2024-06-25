@@ -1,7 +1,7 @@
 import { Server, Socket, createServer } from "net";
 import { IRedisServer } from "../interfaces";
 import { Deserializer } from "../resp/deserializer";
-import { Command, DataType, ErrorType, OperationType } from "../enums";
+import { Command, DataType, ErrorType, OperationType, Option } from "../enums";
 import { Serializer } from "../resp";
 import { AllowedType, MapType, ValueType } from "../types";
 import { TypeUtils } from "../helpers";
@@ -13,6 +13,7 @@ export class RedisServer implements IRedisServer {
   private server?: Server;
 
   private readonly ValidCommands = new Set(Object.values(Command));
+  private readonly ValidOptions = new Set(Object.values(Option));
 
   private store: MapType = new Map<string, ValueType>();
 
@@ -85,9 +86,9 @@ export class RedisServer implements IRedisServer {
         return this.handleRPush(commands);
       }
 
-      // case Command.LRANGE: {
-      //   return this.handleLRange(commands);
-      // }
+      case Command.LRANGE: {
+        return this.handleLRange(commands);
+      }
 
       case Command.INCR: {
         return this.handleIncrDecr(OperationType.INCREMENT, commands);
@@ -118,64 +119,66 @@ export class RedisServer implements IRedisServer {
     }
   }
 
-  // private handleLRange(commands: string[]) {
-  //   if (!commands.length || commands.length > 3) {
-  //     return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for lrange command! Example: lrange key start end`);
-  //   }
+  private handleLRange(commands: string[]) {
+    if (!commands.length || commands.length > 3) {
+      return new InvalidSyntaxError(this).constructErrorResponse();
+    }
 
-  //   const [key, start, stop] = commands;
+    const [key, start, stop] = commands;
 
-  //   const numStart = Number(start);
-  //   const numStop = Number(stop);
+    const numStart = Number(start);
+    const numStop = Number(stop);
 
-  //   const isValidStart = TypeUtils.isNumber(numStart);
-  //   const isValidStop = TypeUtils.isNumber(numStop);
+    const isValidStart = TypeUtils.isNumber(numStart);
+    const isValidStop = TypeUtils.isNumber(numStop);
 
-  //   if (!isValidStart || !isValidStop) {
-  //     return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid syntax for lrange command! Example: lrange key start end`);
-  //   }
+    if (!isValidStart || !isValidStop) {
+      return new InvalidSyntaxError(this).constructErrorResponse();
+    }
 
-  //   const keyExists = this.store.get(key);
+    const keyExists = this.store.get(key);
 
-  //   if (!keyExists) {
-  //     return this.constructResponse(DataType.SIMPLE_ERROR, `Not found key!`);
-  //   }
+    if (!keyExists) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Not found key!`);
+    }
 
-  //   if (numStart > numStop) {
-  //     return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
-  //   }
-  //   const elementsToReturn = [];
+    const value = keyExists.value as Array<AllowedType>;
 
-  //   const isStartPositive = numStart >= 0;
-  //   if (isStartPositive) {
-  //     for (let i = numStart; i <= numStop; i++) {
-  //       elementsToReturn.push(keyExists.value[i]);
-  //     }
-  //   } else {
-  //     const startIndex = keyExists.value.length - numStart;
-  //     const isStopPositive = numStop >= 0;
+    if (numStart > numStop) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
+    }
+    const elementsToReturn = [];
 
-  //     if (isStopPositive) {
-  //       const stopIndex = keyExists.value.length - numStop;
-  //       for (let i = startIndex; i >= stopIndex; i--) {
-  //         elementsToReturn.push(keyExists.value[i]);
-  //       }
-  //     } else {
-  //       const stopIndex = keyExists.value.length - numStop;
+    const isStartPositive = numStart >= 0;
+    if (isStartPositive) {
+      for (let i = numStart; i <= numStop; i++) {
+        elementsToReturn.push(value[i]);
+      }
+    } else {
+      const startIndex = value.length - numStart;
+      const isStopPositive = numStop >= 0;
 
-  //       for (let i = startIndex; i >= stopIndex; i++) {
-  //         elementsToReturn.push(keyExists.value[i]);
-  //       }
-  //     }
+      if (isStopPositive) {
+        const stopIndex = value.length - numStop;
+        for (let i = startIndex; i >= stopIndex; i--) {
+          elementsToReturn.push(value[i]);
+        }
+      } else {
+        const stopIndex = value.length - numStop;
 
-  //     if (startIndex < 0) {
-  //       return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
-  //     }
-  //   }
-  //   keyExists.counter++;
+        for (let i = startIndex; i >= stopIndex; i++) {
+          elementsToReturn.push(value[i]);
+        }
+      }
 
-  //   return this.constructResponse(DataType.SIMPLE_STRING, elementsToReturn.toString());
-  // }
+      if (startIndex < 0) {
+        return this.constructResponse(DataType.SIMPLE_ERROR, `Invalid range!`);
+      }
+    }
+    keyExists.counter++;
+
+    return this.constructResponse(DataType.SIMPLE_STRING, elementsToReturn.toString());
+  }
 
   private handleLPush(commands: string[]) {
     if (!commands.length || commands.length < 2) {
@@ -340,6 +343,15 @@ export class RedisServer implements IRedisServer {
       this.store.set(key, { ...keyExists, counter: keyExists.counter + 1 });
     }
 
+    if (keyExists?.options?.ttl) {
+      const ttl = keyExists.options.ttl;
+      const hasTTLElapsed = ttl.getTime() < new Date().getTime();
+
+      if (hasTTLElapsed) {
+        this.store.delete(key);
+      }
+    }
+
     return this.constructResponse(DataType.SIMPLE_STRING, keyExists?.value ?? "Not found!");
   }
 
@@ -348,17 +360,52 @@ export class RedisServer implements IRedisServer {
       return new InvalidSyntaxError(this).constructErrorResponse();
     }
 
+    const option = commands[2] as Option;
+    const optionValue = commands[3];
+
+    if (option) {
+      if (!optionValue) {
+        return new InvalidSyntaxError(this).constructErrorResponse();
+      }
+
+      const isOptionValid = this.ValidOptions.has(option);
+
+      if (!isOptionValid) {
+        return this.constructResponse(DataType.SIMPLE_ERROR, `${ErrorType.WRONG_OPTION} Option ${commands[2]} isn't acceptable!`);
+      }
+
+      const isValueValid = TypeUtils.isNumber(Number(optionValue));
+
+      if (!isValueValid) {
+        return new InvalidSyntaxError(this).constructErrorResponse();
+      }
+    }
+
     const [key, value] = commands;
     const numValue = Number(value);
     const isNumberValue = TypeUtils.isNumber(numValue);
 
+    const handledOption = this.handleOption(option, Number(optionValue));
+
     if (isNumberValue) {
-      this.store.set(key, { value: numValue, counter: 1 });
+      this.store.set(key, { value: numValue, counter: 1, options: { ...handledOption } });
     } else {
-      this.store.set(key, { value, counter: 1 });
+      this.store.set(key, { value, counter: 1, options: { ...handledOption } });
     }
 
     return this.constructResponse(DataType.SIMPLE_STRING, "OK");
+  }
+
+  private handleOption(option: Option, optionValue: number) {
+    switch (option) {
+      case Option.EX: {
+        return { ttl: new Date(new Date().getTime() + optionValue * 1000) };
+      }
+
+      case Option.PX: {
+        return { ttl: new Date(new Date().getTime() + optionValue) };
+      }
+    }
   }
 
   private handleEcho(commands: string[]) {
