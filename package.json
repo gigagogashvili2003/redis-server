@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start:watch": "tsx --watch src/main.ts",
+    "start:monitor": "pm2 start dist/main.js",
     "start": "tsx src/main.ts",
     "build": "tsc"
   },
