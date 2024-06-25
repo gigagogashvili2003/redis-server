@@ -44,7 +44,7 @@ export class RedisServer implements IRedisServer {
       return this.constructResponse(DataType.SIMPLE_ERROR, `${ErrorType.WRONG_COMAND} Command ${commands[0]} isn't acceptable!`);
     }
 
-    this.handleCommand(command, commands.slice(1));
+    return this.handleCommand(command, commands.slice(1));
   }
 
   private handleCommand(command: Command, commands: string[]) {
@@ -340,7 +340,7 @@ export class RedisServer implements IRedisServer {
       this.store.set(key, { ...keyExists, counter: keyExists.counter + 1 });
     }
 
-    return this.constructResponse(DataType.SIMPLE_STRING, keyExists?.value || "Not found!");
+    return this.constructResponse(DataType.SIMPLE_STRING, keyExists?.value ?? "Not found!");
   }
 
   private handleSetCommand(commands: string[]) {

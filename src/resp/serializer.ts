@@ -1,12 +1,12 @@
 import { CRLF } from "../constants";
 import { DataType } from "../enums";
 import { ISerializer } from "../interfaces";
-import { AllowedTypes } from "../types";
+import { AllowedType } from "../types";
 
 export class Serializer implements ISerializer {
   public constructor() {}
 
-  public serialize(type: DataType, input: AllowedTypes) {
+  public serialize(type: DataType, input: AllowedType) {
     switch (type) {
       case DataType.SIMPLE_STRING: {
         return `${type}${input}${CRLF}`;
