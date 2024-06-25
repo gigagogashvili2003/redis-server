@@ -5,4 +5,8 @@ export class TypeUtils {
   static isArray(value: any): boolean {
     return Array.isArray(value);
   }
+
+  static isBoolean(value: any): boolean {
+    return typeof value === "boolean";
+  }
 }

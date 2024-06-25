@@ -383,12 +383,16 @@ export class RedisServer implements IRedisServer {
 
     const [key, value] = commands;
     const numValue = Number(value);
+    const boolValue = Boolean(value);
     const isNumberValue = TypeUtils.isNumber(numValue);
+    const isBooleanValue = TypeUtils.isBoolean(numValue);
 
     const handledOption = this.handleOption(option, Number(optionValue));
 
     if (isNumberValue) {
       this.store.set(key, { value: numValue, counter: 1, options: { ...handledOption } });
+    } else if (isBooleanValue) {
+      this.store.set(key, { value: boolValue, counter: 1, options: { ...handledOption } });
     } else {
       this.store.set(key, { value, counter: 1, options: { ...handledOption } });
     }
@@ -436,6 +440,19 @@ export class RedisServer implements IRedisServer {
 
     this.server.listen(port, host, () => {
       console.log(`Server is listening on port:${port}, at ${host}`);
+    });
+
+    this.server?.on("error", (e) => {
+      console.error("Address in use, retrying...");
+      setTimeout(() => {
+        this.server?.emit("close");
+        this.server?.listen(port, host);
+      }, 1000);
+    });
+
+    this.server.on("close", () => {
+      this.server?.close();
+      console.log("Server closed!");
     });
   }
 }
