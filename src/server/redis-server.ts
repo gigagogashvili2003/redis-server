@@ -6,6 +6,7 @@ import { Serializer } from "../resp";
 import { AllowedTypes } from "../types";
 import { TypeUtils } from "../helpers";
 import { MemoryManager } from "../memory-manager";
+import { StorageManager } from "../storage";
 
 export class RedisServer implements IRedisServer {
   private server?: Server;
@@ -82,9 +83,24 @@ export class RedisServer implements IRedisServer {
         return this.handleDecr(commands.slice(1));
       }
 
+      case Command.SAVE: {
+        return this.handleSave();
+      }
+
       default: {
         return this.constructResponse(DataType.SIMPLE_ERROR, "Invalid RESP Command!");
       }
+    }
+  }
+
+  private async handleSave() {
+    try {
+      const storageManager = new StorageManager();
+      const makeSnapshot = await storageManager.snapshot(this.store);
+
+      return this.constructResponse(DataType.SIMPLE_STRING, makeSnapshot);
+    } catch (err) {
+      return this.constructResponse(DataType.SIMPLE_ERROR, "Somethign went wrong");
     }
   }
 
