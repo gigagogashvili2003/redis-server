@@ -1,8 +1,9 @@
 import { CRLF } from "../constants";
 import { DataType } from "../enums";
+import { ISerializer } from "../interfaces";
 import { AllowedTypes } from "../types";
 
-export class Serializer {
+export class Serializer implements ISerializer {
   public constructor() {}
 
   public serialize(type: DataType, input: AllowedTypes) {

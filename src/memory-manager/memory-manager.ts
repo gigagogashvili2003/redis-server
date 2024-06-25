@@ -1,14 +1,11 @@
 import { DigitalStorageType } from "../enums";
+import { IMemoryManager } from "../interfaces";
+import { MapType } from "../types";
 
-export class MemoryManager {
+export class MemoryManager implements IMemoryManager {
   public constructor() {}
 
-  public manage(
-    store: Map<string, { value: any; counter: number }>,
-    memoryUsage: NodeJS.MemoryUsage,
-    type: DigitalStorageType = DigitalStorageType.MB,
-    treshold: number = 1,
-  ) {
+  public manage(store: MapType, memoryUsage: NodeJS.MemoryUsage, type: DigitalStorageType = DigitalStorageType.MB, treshold: number = 1) {
     const curMemoryInMb = this.convertMemoryUsage(memoryUsage, type);
     let remainingMemory = curMemoryInMb.heapTotal - curMemoryInMb.heapUsed;
 
@@ -31,7 +28,7 @@ export class MemoryManager {
     }
   }
 
-  public convertMemoryUsage(memoryUsage: NodeJS.MemoryUsage, type: DigitalStorageType): NodeJS.MemoryUsage {
+  private convertMemoryUsage(memoryUsage: NodeJS.MemoryUsage, type: DigitalStorageType): NodeJS.MemoryUsage {
     const divisor = {
       [DigitalStorageType.KB]: 1024,
       [DigitalStorageType.MB]: 1024 * 1024,

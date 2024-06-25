@@ -1,9 +1,10 @@
 import { CRLF } from "../constants";
+import { IDeserializer } from "../interfaces";
 
-export class Deserializer {
+export class Deserializer implements IDeserializer {
   public constructor(public input: string) {}
 
-  public deserializeArrCommands() {
+  public deserializeArrCommands(): string[] {
     this.validateArrCommands();
 
     const splitByCRLF = this.input.split(CRLF);
@@ -21,7 +22,7 @@ export class Deserializer {
     return elements;
   }
 
-  public validateArrCommands() {
+  private validateArrCommands() {
     if (!this.input.startsWith("*")) {
       throw new Error("Invalid Command!");
     }

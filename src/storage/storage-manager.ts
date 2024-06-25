@@ -1,10 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
+import { ValueType } from "../types";
+import { IStorageManager } from "../interfaces";
 
-export class StorageManager {
+export class StorageManager implements IStorageManager {
   public constructor() {}
 
-  public async snapshot(storage: Map<string, { value: any; counter: number }>) {
+  public async snapshot(storage: Map<string, ValueType>) {
     try {
       await fs.mkdir(path.resolve(__dirname, "snapshots"), { recursive: true });
 
